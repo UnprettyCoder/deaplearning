@@ -14,12 +14,16 @@ from keras.layers import GlobalAveragePooling2D, GlobalMaxPooling2D, TimeDistrib
 from keras.engine.topology import get_source_inputs
 from keras.utils import layer_utils
 from keras.utils.data_utils import get_file
-from keras.backend import tensorflow_backend as K
+from keras import backend as K
 from keras_frcnn.RoiPoolingConv import RoiPoolingConv
 
 
 def get_weight_path():
-    return 'vgg16_weights_tf_dim_ordering_tf_kernels.h5'
+    if K.image_dim_ordering() == 'th':
+        print('pretrained weights not available for VGG with theano backend')
+        return
+    else:
+        return 'vgg16_weights_tf_dim_ordering_tf_kernels.h5'
 
 
 def get_img_output_length(width, height):
@@ -33,8 +37,10 @@ def nn_base(input_tensor=None, trainable=False):
 
 
     # Determine proper input shape
-
-    input_shape = (None, None, 3)
+    if K.image_dim_ordering() == 'th':
+        input_shape = (3, None, None)
+    else:
+        input_shape = (None, None, 3)
 
     if input_tensor is None:
         img_input = Input(shape=input_shape)
@@ -44,9 +50,10 @@ def nn_base(input_tensor=None, trainable=False):
         else:
             img_input = input_tensor
 
-
-    bn_axis = 3
-
+    if K.image_dim_ordering() == 'tf':
+        bn_axis = 3
+    else:
+        bn_axis = 1
 
     # Block 1
     x = Conv2D(64, (3, 3), activation='relu', padding='same', name='block1_conv1')(img_input)
@@ -93,10 +100,12 @@ def classifier(base_layers, input_rois, num_rois, nb_classes = 21, trainable=Fal
 
     # compile times on theano tend to be very high, so we use smaller ROI pooling regions to workaround
 
-
-    pooling_regions = 7
-    input_shape = (num_rois, 7, 7, 512)
-
+    if K.backend() == 'tensorflow':
+        pooling_regions = 7
+        input_shape = (num_rois, 7, 7, 512)
+    elif K.backend() == 'theano':
+        pooling_regions = 7
+        input_shape = (num_rois, 512, 7, 7)
 
     out_roi_pool = RoiPoolingConv(pooling_regions, num_rois)([base_layers, input_rois])
 
